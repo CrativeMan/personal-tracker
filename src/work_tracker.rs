@@ -7,6 +7,7 @@ pub struct WorkEntry {
     pub id: i64,
     pub date: NaiveDate,
     pub station: String,
+    pub shift: String,
 }
 
 #[derive(Debug)]
@@ -22,7 +23,8 @@ impl WorkTracker {
             "CREATE TABLE IF NOT EXISTS work_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
-                station TEXT NOT NULL
+                station TEXT NOT NULL,
+                shift TEXT NOT NULL
             )",
             [],
         )
@@ -34,7 +36,7 @@ impl WorkTracker {
     pub fn load_all(&self) -> Vec<WorkEntry> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, date, station FROM work_entries ORDER BY date DESC")
+            .prepare("SELECT id, date, station, shift FROM work_entries ORDER BY date DESC")
             .unwrap();
 
         let rows = stmt
@@ -43,6 +45,7 @@ impl WorkTracker {
                     id: row.get(0)?,
                     date: NaiveDate::parse_from_str(&row.get::<_, String>(1)?, "%Y-%m-%d").unwrap(),
                     station: row.get(2)?,
+                    shift: row.get(3)?,
                 })
             })
             .unwrap();
@@ -50,11 +53,11 @@ impl WorkTracker {
         rows.map(|r| r.unwrap()).collect()
     }
 
-    pub fn add(&mut self, date: NaiveDate, station: &str) {
+    pub fn add(&mut self, date: NaiveDate, station: &str, shift: &str) {
         self.conn
             .execute(
-                "INSERT INTO work_entries (date, station) VALUES (?1, ?2)",
-                params![date.format("%Y-%m-%d").to_string(), station],
+                "INSERT INTO work_entries (date, station, shift) VALUES (?1, ?2, ?3)",
+                params![date.format("%Y-%m-%d").to_string(), station, shift],
             )
             .unwrap();
     }

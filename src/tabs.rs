@@ -16,8 +16,10 @@ pub struct WorkTab {
     add_entry_modal: bool,
     new_date_entry: String,
     new_station_entry: String,
+    new_shift_entry: String,
 
     cache: Vec<WorkEntry>,
+    dirty: bool,
     to_delete: Option<i64>,
 }
 
@@ -28,7 +30,9 @@ impl WorkTab {
             add_entry_modal: false,
             new_date_entry: String::new(),
             new_station_entry: String::new(),
+            new_shift_entry: String::new(),
             cache: Vec::new(),
+            dirty: true,
             to_delete: None,
         }
     }
@@ -43,6 +47,7 @@ impl Tab for HomeTab {
 
 impl WorkTab {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
+        self.reload_cache();
         // ---- ADD NEW ENTRY ----
         ui.horizontal(|ui| {
             if ui.button("New Entry").clicked() {
@@ -65,16 +70,22 @@ impl WorkTab {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.new_station_entry).hint_text("Station"),
                 );
+
+                ui.add(egui::TextEdit::singleline(&mut self.new_shift_entry).hint_text("Shift"));
                 ui.separator();
                 if ui.button("Add").clicked() {
                     if let Ok(date) = NaiveDate::parse_from_str(&self.new_date_entry, "%Y-%m-%d") {
-                        self.work_tracker
-                            .add(date, self.new_station_entry.clone().as_str());
+                        self.work_tracker.add(
+                            date,
+                            self.new_station_entry.clone().as_str(),
+                            &self.new_shift_entry.clone().as_str(),
+                        );
                     }
                     ui.close();
                     self.new_date_entry.clear();
                     self.new_station_entry.clear();
-                    self.reload_cache();
+                    self.new_shift_entry.clear();
+                    self.dirty = true;
                 }
             });
 
@@ -93,12 +104,16 @@ impl WorkTab {
                 .column(egui_extras::Column::auto())
                 .column(egui_extras::Column::remainder())
                 .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::auto())
                 .header(20.0, |mut header| {
                     header.col(|ui| {
                         ui.label("Date");
                     });
                     header.col(|ui| {
                         ui.label("Station");
+                    });
+                    header.col(|ui| {
+                        ui.label("Shift");
                     });
                     header.col(|ui| {
                         ui.label("Actions");
@@ -116,8 +131,13 @@ impl WorkTab {
                             });
 
                             row.col(|ui| {
+                                ui.label(&entry.shift);
+                            });
+
+                            row.col(|ui| {
                                 if ui.button("Delete").clicked() {
                                     self.to_delete = Some(entry.id);
+                                    self.dirty = true;
                                 }
                             });
                         });
@@ -131,7 +151,10 @@ impl WorkTab {
         }
     }
     fn reload_cache(&mut self) {
-        self.cache = self.work_tracker.load_all();
+        if self.dirty {
+            self.cache = self.work_tracker.load_all();
+            self.dirty = false;
+        }
     }
 }
 
