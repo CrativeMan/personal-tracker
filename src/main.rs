@@ -46,6 +46,9 @@ impl Tracker {
             {
                 self.page = Page::Settings(SettingsTab::default());
             }
+            if ui.button("Close").clicked() {
+            	ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            }
         });
     }
 

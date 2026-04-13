@@ -42,7 +42,11 @@ impl WorkTab {
 pub struct SettingsTab {}
 
 impl Tab for HomeTab {
-    fn ui(&mut self, _ui: &mut egui::Ui) {}
+    fn ui(&mut self, ui: &mut egui::Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            ui.label("To quit CTRL + Q");
+        });
+    }
 }
 
 impl WorkTab {
