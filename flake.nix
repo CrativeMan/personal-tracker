@@ -41,6 +41,7 @@
             lldb
             package-version-server
             python3
+            ruff
 
             libx11
             libxcursor
