@@ -213,8 +213,7 @@ fn metric_card(ui: &mut egui::Ui, label: &str, value: &str, sub: Option<&str>) {
         .inner_margin(egui::Margin::same(8))
         .corner_radius(4.0)
         .show(ui, |ui| {
-            ui.set_min_width(90.0);
-            ui.label(egui::RichText::new(label).small().weak());
+            ui.label(egui::RichText::new(label).small());
             ui.label(egui::RichText::new(value).heading());
             if let Some(s) = sub {
                 ui.label(egui::RichText::new(s).small().weak());
