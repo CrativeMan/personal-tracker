@@ -91,9 +91,14 @@
 
           cargoLock.lockFile = ./Cargo.lock;
 
-          nativeBuildInputs = commonNativeBuildInputs;
+          nativeBuildInputs = commonNativeBuildInputs ++ [pkgs.makeWrapper];
 
           buildInputs = guiLibs;
+
+          postFixup = ''
+            wrapProgram $out/bin/personal-tracker \
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath guiLibs}
+          '';
         };
       }
     );
