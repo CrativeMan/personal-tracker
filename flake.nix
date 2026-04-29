@@ -1,13 +1,10 @@
 {
-  description = "Rust Rover environment";
+  description = "Personal tracker application";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils = {
-      url = "github:numtide/flake-utils";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs = {
@@ -27,38 +24,44 @@
         rustToolchain = pkgs.rust-bin.stable."1.94.0".default.override {
           extensions = ["rust-src" "clippy" "rustfmt"];
         };
+
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rustToolchain;
+          rustc = rustToolchain;
+        };
+
+        guiLibs = with pkgs; [
+          libx11
+          libxcursor
+          libxrandr
+          libxi
+          libxinerama
+          glew
+          libGL
+          wayland
+          libxkbcommon
+        ];
+
+        commonNativeBuildInputs = with pkgs; [
+          pkg-config
+          cmake
+        ];
       in {
         devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [
-            rustToolchain
-            pkg-config
-          ];
+          nativeBuildInputs = [rustToolchain] ++ commonNativeBuildInputs;
 
-          buildInputs = with pkgs; [
-            openssl
-            pkg-config
-            rust-analyzer
-            lldb
-            package-version-server
-            python3
-            ruff
-
-            libx11
-            libxcursor
-            libxrandr
-            libxi
-            libxinerama
-            glew
-            libGL
-            cmake
-            wayland-scanner
-            wayland
-            wayland-protocols
-            libxkbcommon
-
-            docker
-            sqlx-cli
-          ];
+          buildInputs = with pkgs;
+            [
+              openssl
+              rust-analyzer
+              lldb
+              package-version-server
+              python3
+              ruff
+              docker
+              sqlx-cli
+            ]
+            ++ guiLibs;
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
             pkgs.libGL
@@ -78,6 +81,19 @@
 
             export RUST_SRC_PATH="$HOME/.rust-rover/toolchain/lib/rustlib/src/rust/library"
           '';
+        };
+
+        packages.default = rustPlatform.buildRustPackage {
+          pname = "personal-tracker";
+          version = "0.1.0";
+
+          src = ./.;
+
+          cargoLock.lockFile = ./Cargo.lock;
+
+          nativeBuildInputs = commonNativeBuildInputs;
+
+          buildInputs = guiLibs;
         };
       }
     );
