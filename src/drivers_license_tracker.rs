@@ -76,6 +76,15 @@ impl DriversLicenseTracker {
             .unwrap();
     }
 
+    pub fn update_lesson(&mut self, id: i64, date: NaiveDate, lesson_type: &str, instructor: &str, notes: &str) {
+        self.conn
+            .execute(
+                "UPDATE dl_lessons SET date=?1, lesson_type=?2, instructor=?3, notes=?4 WHERE id=?5",
+                params![date.format("%Y-%m-%d").to_string(), lesson_type, instructor, notes, id],
+            )
+            .unwrap();
+    }
+
     pub fn load_all_lessons(&self) -> Vec<LessonEntry> {
         let mut stmt = self
             .conn
@@ -120,6 +129,15 @@ impl DriversLicenseTracker {
     pub fn delete_expense(&mut self, id: i64) {
         self.conn
             .execute("DELETE FROM dl_expenses WHERE id = ?1", params![id])
+            .unwrap();
+    }
+
+    pub fn update_expense(&mut self, id: i64, date: NaiveDate, description: &str, amount: f64, category: &str) {
+        self.conn
+            .execute(
+                "UPDATE dl_expenses SET date=?1, description=?2, amount=?3, category=?4 WHERE id=?5",
+                params![date.format("%Y-%m-%d").to_string(), description, amount, category, id],
+            )
             .unwrap();
     }
 

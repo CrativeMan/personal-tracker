@@ -77,6 +77,29 @@ pub fn bar_chart(
     }
 }
 
+#[derive(Debug, Default)]
+pub struct ExportStatus {
+    message: Option<String>,
+    since: Option<std::time::Instant>,
+}
+
+impl ExportStatus {
+    pub fn set(&mut self, msg: String) {
+        self.message = Some(msg);
+        self.since = Some(std::time::Instant::now());
+    }
+
+    pub fn tick(&mut self) -> Option<String> {
+        if let Some(ts) = self.since {
+            if ts.elapsed().as_secs() >= 3 {
+                self.message = None;
+                self.since = None;
+            }
+        }
+        self.message.clone()
+    }
+}
+
 pub fn bar_chart_money(
     ui: &mut egui::Ui,
     title: &str,

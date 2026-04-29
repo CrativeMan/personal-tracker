@@ -121,6 +121,15 @@ impl WorkTracker {
             .unwrap();
     }
 
+    pub fn update(&mut self, id: i64, date: NaiveDate, station: &str, shift: &str) {
+        self.conn
+            .execute(
+                "UPDATE work_entries SET date=?1, station=?2, shift=?3 WHERE id=?4",
+                params![date.format("%Y-%m-%d").to_string(), station, shift, id],
+            )
+            .unwrap();
+    }
+
     pub fn export_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
         use std::io::Write;
         let mut f = std::fs::File::create(path)?;
