@@ -1,3 +1,21 @@
+pub fn icon_label(icon: egui_material_icons::MaterialIcon, text: &str) -> egui::WidgetText {
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        icon.codepoint,
+        0.0,
+        egui::text::TextFormat {
+            font_id: egui::FontId::new(14.0, icon.font_family()),
+            ..Default::default()
+        },
+    );
+    job.append(
+        &format!(" {text}"),
+        0.0,
+        egui::text::TextFormat::default(),
+    );
+    egui::WidgetText::LayoutJob(job.into())
+}
+
 pub fn metric_card(ui: &mut egui::Ui, label: &str, value: &str, sub: Option<&str>) {
     egui::Frame::new()
         .fill(ui.visuals().faint_bg_color)

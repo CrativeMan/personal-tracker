@@ -1,6 +1,11 @@
+use egui_material_icons::icons::{
+    ICON_CLOSE, ICON_DIRECTIONS_CAR, ICON_HOME, ICON_SETTINGS, ICON_WORK,
+};
+
 use crate::{
     settings::AppSettings,
     tabs::{DriverslicenseTab, HomeTab, SettingsTab, WorkTab},
+    ui::icon_label,
 };
 
 mod drivers_license_tracker;
@@ -41,33 +46,45 @@ impl Tracker {
         let dl_db = self.settings.dl_db();
         ui.horizontal(|ui| {
             if ui
-                .selectable_label(matches!(self.page, Page::Home(_)), "Home")
+                .selectable_label(
+                    matches!(self.page, Page::Home(_)),
+                    icon_label(ICON_HOME, "Home"),
+                )
                 .clicked()
             {
                 self.page = Page::Home(Box::new(HomeTab::new(&work_db, &dl_db)));
             }
 
             if ui
-                .selectable_label(matches!(self.page, Page::Work(_)), "Work")
+                .selectable_label(
+                    matches!(self.page, Page::Work(_)),
+                    icon_label(ICON_WORK, "Work"),
+                )
                 .clicked()
             {
                 self.page = Page::Work(Box::new(WorkTab::new(&work_db)));
             }
 
             if ui
-                .selectable_label(matches!(self.page, Page::Führerschein(_)), "Führerschein")
+                .selectable_label(
+                    matches!(self.page, Page::Führerschein(_)),
+                    icon_label(ICON_DIRECTIONS_CAR, "Führerschein"),
+                )
                 .clicked()
             {
                 self.page = Page::Führerschein(Box::new(DriverslicenseTab::new(&dl_db)));
             }
 
             if ui
-                .selectable_label(matches!(self.page, Page::Settings(_)), "Settings")
+                .selectable_label(
+                    matches!(self.page, Page::Settings(_)),
+                    icon_label(ICON_SETTINGS, "Settings"),
+                )
                 .clicked()
             {
                 self.page = Page::Settings(SettingsTab::default());
             }
-            if ui.button("Close").clicked() {
+            if ui.button(icon_label(ICON_CLOSE, "Close")).clicked() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });
@@ -105,7 +122,7 @@ fn main() -> Result<(), eframe::Error> {
     tracing_subscriber::fmt().init();
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
 

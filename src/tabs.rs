@@ -1,10 +1,11 @@
 use chrono::{Datelike, NaiveDate};
 use egui::{Id, Modal};
+use egui_material_icons::icons::{ICON_ADD, ICON_DELETE, ICON_DOWNLOAD};
 
 use crate::{
     drivers_license_tracker::{DriversLicenseStats, DriversLicenseTracker, ExpenseEntry, LessonEntry},
     settings::{AppSettings, ACCENT_PALETTE},
-    ui::{bar_chart, bar_chart_money, metric_card},
+    ui::{bar_chart, bar_chart_money, icon_label, metric_card},
     work_tracker::{WorkEntry, WorkStats, WorkTracker},
 };
 
@@ -314,10 +315,10 @@ impl DriverslicenseTab {
 
     fn lessons_ui(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         ui.horizontal(|ui| {
-            if ui.button("New Lesson").clicked() {
+            if ui.button(icon_label(ICON_ADD, "New Lesson")).clicked() {
                 self.add_lesson_modal = true;
             }
-            if ui.button("Export CSV").clicked() {
+            if ui.button(icon_label(ICON_DOWNLOAD, "Export CSV")).clicked() {
                 let path = format!("{}/lessons_export.csv", settings.data_dir);
                 match self.tracker.export_lessons_csv(&path) {
                     Ok(()) => self.export_status = Some(format!("Exported to {path}")),
@@ -419,7 +420,7 @@ impl DriverslicenseTab {
                             row.col(|ui| { ui.label(&entry.instructor); });
                             row.col(|ui| { ui.label(&entry.notes); });
                             row.col(|ui| {
-                                if ui.button("Delete").clicked() {
+                                if ui.button(ICON_DELETE).on_hover_text("Delete").clicked() {
                                     self.lesson_to_delete = Some(entry.id);
                                     self.lesson_dirty = true;
                                     self.expense_dirty = true;
@@ -440,10 +441,10 @@ impl DriverslicenseTab {
 
     fn expenses_ui(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         ui.horizontal(|ui| {
-            if ui.button("New Expense").clicked() {
+            if ui.button(icon_label(ICON_ADD, "New Expense")).clicked() {
                 self.add_expense_modal = true;
             }
-            if ui.button("Export CSV").clicked() {
+            if ui.button(icon_label(ICON_DOWNLOAD, "Export CSV")).clicked() {
                 let path = format!("{}/expenses_export.csv", settings.data_dir);
                 match self.tracker.export_expenses_csv(&path) {
                     Ok(()) => self.export_status = Some(format!("Exported to {path}")),
@@ -548,7 +549,7 @@ impl DriverslicenseTab {
                             row.col(|ui| { ui.label(format!("€{:.2}", entry.amount)); });
                             row.col(|ui| { ui.label(&entry.category); });
                             row.col(|ui| {
-                                if ui.button("Delete").clicked() {
+                                if ui.button(ICON_DELETE).on_hover_text("Delete").clicked() {
                                     self.expense_to_delete = Some(entry.id);
                                     self.expense_dirty = true;
                                 }
@@ -596,10 +597,10 @@ impl WorkTab {
     fn work_entry_table(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         self.reload_cache();
         ui.horizontal(|ui| {
-            if ui.button("New Entry").clicked() {
+            if ui.button(icon_label(ICON_ADD, "New Entry")).clicked() {
                 self.add_entry_modal = true;
             }
-            if ui.button("Export CSV").clicked() {
+            if ui.button(icon_label(ICON_DOWNLOAD, "Export CSV")).clicked() {
                 let path = format!("{}/work_export.csv", settings.data_dir);
                 match self.work_tracker.export_csv(&path) {
                     Ok(()) => self.export_status = Some(format!("Exported to {path}")),
@@ -679,7 +680,7 @@ impl WorkTab {
                             row.col(|ui| { ui.label(&entry.station); });
                             row.col(|ui| { ui.label(&entry.shift); });
                             row.col(|ui| {
-                                if ui.button("Delete").clicked() {
+                                if ui.button(ICON_DELETE).on_hover_text("Delete").clicked() {
                                     self.to_delete = Some(entry.id);
                                     self.dirty = true;
                                 }
