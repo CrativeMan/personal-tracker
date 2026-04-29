@@ -1,12 +1,15 @@
-use crate::tabs::{HomeTab, SettingsTab, Tab, WorkTab};
+use crate::tabs::{DriverslicenseTab, HomeTab, SettingsTab, Tab, WorkTab};
 
+mod drivers_license_tracker;
 mod tabs;
+mod ui;
 mod work_tracker;
 
 #[derive(Debug)]
 enum Page {
     Home(HomeTab),
-    Work(WorkTab),
+    Work(Box<WorkTab>),
+    Führerschein(Box<DriverslicenseTab>),
     Settings(SettingsTab),
 }
 
@@ -37,7 +40,14 @@ impl Tracker {
                 .selectable_label(matches!(self.page, Page::Work(_)), "Work")
                 .clicked()
             {
-                self.page = Page::Work(WorkTab::new());
+                self.page = Page::Work(Box::new(WorkTab::new()));
+            }
+
+            if ui
+                .selectable_label(matches!(self.page, Page::Führerschein(_)), "Führerschein")
+                .clicked()
+            {
+                self.page = Page::Führerschein(Box::new(DriverslicenseTab::new()));
             }
 
             if ui
@@ -47,7 +57,7 @@ impl Tracker {
                 self.page = Page::Settings(SettingsTab::default());
             }
             if ui.button("Close").clicked() {
-            	ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });
     }
@@ -56,6 +66,7 @@ impl Tracker {
         match &mut self.page {
             Page::Home(page) => page.ui(ui),
             Page::Work(page) => page.ui(ui),
+            Page::Führerschein(page) => page.ui(ui),
             Page::Settings(page) => page.ui(ui),
         }
     }

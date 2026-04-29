@@ -1,7 +1,11 @@
 use chrono::NaiveDate;
 use egui::{Id, Modal};
 
-use crate::work_tracker::{WorkEntry, WorkStats, WorkTracker};
+use crate::{
+    drivers_license_tracker::{DriversLicenseStats, DriversLicenseTracker, ExpenseEntry, LessonEntry},
+    ui::{bar_chart, bar_chart_money, metric_card},
+    work_tracker::{WorkEntry, WorkStats, WorkTracker},
+};
 
 pub trait Tab {
     fn ui(&mut self, ui: &mut egui::Ui);
@@ -37,6 +41,362 @@ impl WorkTab {
             dirty: true,
             to_delete: None,
             stats: WorkStats::default(),
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+enum DlView {
+    #[default]
+    Lessons,
+    Expenses,
+}
+
+#[derive(Debug)]
+pub struct DriverslicenseTab {
+    tracker: DriversLicenseTracker,
+    view: DlView,
+
+    lesson_cache: Vec<LessonEntry>,
+    lesson_dirty: bool,
+    lesson_to_delete: Option<i64>,
+    add_lesson_modal: bool,
+    new_lesson_date: String,
+    new_lesson_type: String,
+    new_lesson_instructor: String,
+    new_lesson_notes: String,
+    lesson_type_suggestions: Vec<String>,
+
+    expense_cache: Vec<ExpenseEntry>,
+    expense_dirty: bool,
+    expense_to_delete: Option<i64>,
+    add_expense_modal: bool,
+    new_expense_date: String,
+    new_expense_description: String,
+    new_expense_amount: String,
+    new_expense_category: String,
+    expense_category_suggestions: Vec<String>,
+
+    stats: DriversLicenseStats,
+}
+
+impl DriverslicenseTab {
+    pub fn new() -> Self {
+        Self {
+            tracker: DriversLicenseTracker::new("./drivers_license.db"),
+            view: DlView::Lessons,
+            lesson_cache: Vec::new(),
+            lesson_dirty: true,
+            lesson_to_delete: None,
+            add_lesson_modal: false,
+            new_lesson_date: String::new(),
+            new_lesson_type: String::new(),
+            new_lesson_instructor: String::new(),
+            new_lesson_notes: String::new(),
+            lesson_type_suggestions: Vec::new(),
+            expense_cache: Vec::new(),
+            expense_dirty: true,
+            expense_to_delete: None,
+            add_expense_modal: false,
+            new_expense_date: String::new(),
+            new_expense_description: String::new(),
+            new_expense_amount: String::new(),
+            new_expense_category: String::new(),
+            expense_category_suggestions: Vec::new(),
+            stats: DriversLicenseStats::default(),
+        }
+    }
+
+    fn reload_cache(&mut self) {
+        if self.lesson_dirty {
+            self.lesson_cache = self.tracker.load_all_lessons();
+            self.lesson_type_suggestions = self.tracker.unique_lesson_types();
+            self.lesson_dirty = false;
+        }
+        if self.expense_dirty {
+            self.expense_cache = self.tracker.load_all_expenses();
+            self.expense_category_suggestions = self.tracker.unique_expense_categories();
+            self.expense_dirty = false;
+        }
+        if self.lesson_dirty || self.expense_dirty {
+            self.stats = self.tracker.stats();
+        }
+    }
+
+    fn stats_ui(&self, ui: &mut egui::Ui) {
+        let s = &self.stats;
+        ui.horizontal(|ui| {
+            metric_card(ui, "Total lessons", &s.total_lessons.to_string(), None);
+            metric_card(ui, "This month", &s.lessons_this_month.to_string(), None);
+            metric_card(ui, "Total spent", &format!("€{:.2}", s.total_spent), None);
+            metric_card(
+                ui,
+                "Spent this month",
+                &format!("€{:.2}", s.spent_this_month),
+                None,
+            );
+        });
+
+        ui.add_space(8.0);
+
+        let max_type = s.by_lesson_type.first().map(|(_, n)| *n).unwrap_or(1);
+        let max_cat = s.by_category.first().map(|(_, n)| *n).unwrap_or(1.0);
+
+        ui.columns(2, |cols| {
+            bar_chart(&mut cols[0], "By lesson type", &s.by_lesson_type, max_type);
+            bar_chart_money(&mut cols[1], "By expense category", &s.by_category, max_cat);
+        });
+    }
+
+    fn lessons_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("New Lesson").clicked() {
+                self.add_lesson_modal = true;
+            }
+        });
+
+        if self.add_lesson_modal {
+            let suggestions = self.lesson_type_suggestions.clone();
+            let modal = Modal::new(Id::new("dl_lesson_modal")).show(ui.ctx(), |ui| {
+                ui.heading("New Lesson");
+
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.new_lesson_date).hint_text("Date"),
+                    );
+                    if ui.button("Today").clicked() {
+                        self.new_lesson_date = chrono::Local::now().date_naive().to_string();
+                    }
+                });
+
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_lesson_type)
+                        .hint_text("Lesson type"),
+                );
+                if !suggestions.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in &suggestions {
+                            if ui.small_button(s).clicked() {
+                                self.new_lesson_type = s.clone();
+                            }
+                        }
+                    });
+                }
+
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_lesson_instructor)
+                        .hint_text("Instructor"),
+                );
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_lesson_notes).hint_text("Notes"),
+                );
+
+                ui.separator();
+                if ui.button("Add").clicked() {
+                    if let Ok(date) =
+                        NaiveDate::parse_from_str(&self.new_lesson_date, "%Y-%m-%d")
+                    {
+                        self.tracker.add_lesson(
+                            date,
+                            &self.new_lesson_type.clone(),
+                            &self.new_lesson_instructor.clone(),
+                            &self.new_lesson_notes.clone(),
+                        );
+                        self.lesson_dirty = true;
+                        self.expense_dirty = true;
+                    }
+                    ui.close();
+                    self.new_lesson_date.clear();
+                    self.new_lesson_type.clear();
+                    self.new_lesson_instructor.clear();
+                    self.new_lesson_notes.clear();
+                }
+            });
+
+            if modal.should_close() {
+                self.add_lesson_modal = false;
+            }
+        }
+
+        ui.separator();
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            egui_extras::TableBuilder::new(ui)
+                .striped(true)
+                .resizable(true)
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::remainder())
+                .column(egui_extras::Column::auto())
+                .header(20.0, |mut header| {
+                    header.col(|ui| { ui.label("Date"); });
+                    header.col(|ui| { ui.label("Type"); });
+                    header.col(|ui| { ui.label("Instructor"); });
+                    header.col(|ui| { ui.label("Notes"); });
+                    header.col(|ui| { ui.label("Actions"); });
+                })
+                .body(|mut body| {
+                    for entry in &self.lesson_cache {
+                        body.row(18.0, |mut row| {
+                            row.col(|ui| { ui.label(entry.date.to_string()); });
+                            row.col(|ui| { ui.label(&entry.lesson_type); });
+                            row.col(|ui| { ui.label(&entry.instructor); });
+                            row.col(|ui| { ui.label(&entry.notes); });
+                            row.col(|ui| {
+                                if ui.button("Delete").clicked() {
+                                    self.lesson_to_delete = Some(entry.id);
+                                    self.lesson_dirty = true;
+                                    self.expense_dirty = true;
+                                }
+                            });
+                        });
+                    }
+                });
+        });
+
+        if let Some(id) = self.lesson_to_delete.take() {
+            self.tracker.delete_lesson(id);
+            self.lesson_cache = self.tracker.load_all_lessons();
+            self.lesson_type_suggestions = self.tracker.unique_lesson_types();
+            self.stats = self.tracker.stats();
+        }
+    }
+
+    fn expenses_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("New Expense").clicked() {
+                self.add_expense_modal = true;
+            }
+        });
+
+        if self.add_expense_modal {
+            let suggestions = self.expense_category_suggestions.clone();
+            let modal = Modal::new(Id::new("dl_expense_modal")).show(ui.ctx(), |ui| {
+                ui.heading("New Expense");
+
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.new_expense_date)
+                            .hint_text("Date"),
+                    );
+                    if ui.button("Today").clicked() {
+                        self.new_expense_date = chrono::Local::now().date_naive().to_string();
+                    }
+                });
+
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_expense_description)
+                        .hint_text("Description"),
+                );
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_expense_amount)
+                        .hint_text("Amount (€)"),
+                );
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_expense_category)
+                        .hint_text("Category"),
+                );
+                if !suggestions.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in &suggestions {
+                            if ui.small_button(s).clicked() {
+                                self.new_expense_category = s.clone();
+                            }
+                        }
+                    });
+                }
+
+                ui.separator();
+                if ui.button("Add").clicked() {
+                    if let (Ok(date), Ok(amount)) = (
+                        NaiveDate::parse_from_str(&self.new_expense_date, "%Y-%m-%d"),
+                        self.new_expense_amount.parse::<f64>(),
+                    ) {
+                        self.tracker.add_expense(
+                            date,
+                            &self.new_expense_description.clone(),
+                            amount,
+                            &self.new_expense_category.clone(),
+                        );
+                        self.expense_dirty = true;
+                    }
+                    ui.close();
+                    self.new_expense_date.clear();
+                    self.new_expense_description.clear();
+                    self.new_expense_amount.clear();
+                    self.new_expense_category.clear();
+                }
+            });
+
+            if modal.should_close() {
+                self.add_expense_modal = false;
+            }
+        }
+
+        ui.separator();
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            egui_extras::TableBuilder::new(ui)
+                .striped(true)
+                .resizable(true)
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::remainder())
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::auto())
+                .header(20.0, |mut header| {
+                    header.col(|ui| { ui.label("Date"); });
+                    header.col(|ui| { ui.label("Description"); });
+                    header.col(|ui| { ui.label("Amount"); });
+                    header.col(|ui| { ui.label("Category"); });
+                    header.col(|ui| { ui.label("Actions"); });
+                })
+                .body(|mut body| {
+                    for entry in &self.expense_cache {
+                        body.row(18.0, |mut row| {
+                            row.col(|ui| { ui.label(entry.date.to_string()); });
+                            row.col(|ui| { ui.label(&entry.description); });
+                            row.col(|ui| { ui.label(format!("€{:.2}", entry.amount)); });
+                            row.col(|ui| { ui.label(&entry.category); });
+                            row.col(|ui| {
+                                if ui.button("Delete").clicked() {
+                                    self.expense_to_delete = Some(entry.id);
+                                    self.expense_dirty = true;
+                                }
+                            });
+                        });
+                    }
+                });
+        });
+
+        if let Some(id) = self.expense_to_delete.take() {
+            self.tracker.delete_expense(id);
+            self.expense_cache = self.tracker.load_all_expenses();
+            self.expense_category_suggestions = self.tracker.unique_expense_categories();
+            self.stats = self.tracker.stats();
+        }
+    }
+
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        self.reload_cache();
+        self.stats = self.tracker.stats();
+        self.stats_ui(ui);
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            if ui.selectable_label(self.view == DlView::Lessons, "Lessons").clicked() {
+                self.view = DlView::Lessons;
+            }
+            if ui.selectable_label(self.view == DlView::Expenses, "Expenses").clicked() {
+                self.view = DlView::Expenses;
+            }
+        });
+        ui.separator();
+
+        match self.view {
+            DlView::Lessons => self.lessons_ui(ui),
+            DlView::Expenses => self.expenses_ui(ui),
         }
     }
 }
@@ -85,7 +445,7 @@ impl WorkTab {
                         self.work_tracker.add(
                             date,
                             self.new_station_entry.clone().as_str(),
-                            &self.new_shift_entry.clone().as_str(),
+                            self.new_shift_entry.clone().as_str(),
                         );
                     }
                     ui.close();
@@ -205,59 +565,4 @@ impl WorkTab {
 
 impl Tab for SettingsTab {
     fn ui(&mut self, _ui: &mut egui::Ui) {}
-}
-
-fn metric_card(ui: &mut egui::Ui, label: &str, value: &str, sub: Option<&str>) {
-    egui::Frame::new()
-        .fill(ui.visuals().faint_bg_color)
-        .inner_margin(egui::Margin::same(8))
-        .corner_radius(4.0)
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new(label).small());
-            ui.label(egui::RichText::new(value).heading());
-            if let Some(s) = sub {
-                ui.label(egui::RichText::new(s).small().weak());
-            }
-        });
-}
-
-fn bar_chart(ui: &mut egui::Ui, title: &str, rows: &[(String, usize)], max: usize) {
-    ui.label(egui::RichText::new(title).small().weak());
-
-    let label_w = rows
-        .iter()
-        .take(6)
-        .map(|(name, _)| {
-            ui.painter()
-                .layout_no_wrap(
-                    name.clone(),
-                    egui::FontId::proportional(12.0),
-                    egui::Color32::WHITE,
-                )
-                .size()
-                .x
-        })
-        .fold(0.0_f32, f32::max)
-        + 4.0;
-
-    for (name, count) in rows.iter().take(6) {
-        ui.horizontal(|ui| {
-            ui.set_min_height(16.0);
-            ui.add_sized(
-                [label_w, 16.0],
-                egui::Label::new(egui::RichText::new(name).small()),
-            );
-            let bar_w = ui.available_width() - 30.0;
-            let filled = bar_w * (*count as f32 / max as f32);
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(bar_w, 8.0), egui::Sense::hover());
-            ui.painter()
-                .rect_filled(rect, 2.0, ui.visuals().faint_bg_color);
-            ui.painter().rect_filled(
-                egui::Rect::from_min_size(rect.min, egui::vec2(filled, 8.0)),
-                2.0,
-                egui::Color32::from_rgb(0x1D, 0x9E, 0x75),
-            );
-            ui.label(egui::RichText::new(count.to_string()).small().weak());
-        });
-    }
 }
