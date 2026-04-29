@@ -89,6 +89,14 @@ impl AppSettings {
         ctx.set_pixels_per_point(self.pixels_per_point);
     }
 
+    pub fn work_db(&self) -> String {
+        format!("{}/work_tracker.db", self.data_dir.trim_end_matches('/'))
+    }
+
+    pub fn dl_db(&self) -> String {
+        format!("{}/drivers_license.db", self.data_dir.trim_end_matches('/'))
+    }
+
     pub fn accent(&self) -> egui::Color32 {
         let [r, g, b] = self.accent_color;
         egui::Color32::from_rgb(r, g, b)

@@ -1,6 +1,6 @@
 use crate::{
     settings::AppSettings,
-    tabs::{DriverslicenseTab, HomeTab, SettingsTab, Tab, WorkTab},
+    tabs::{DriverslicenseTab, HomeTab, SettingsTab, WorkTab},
 };
 
 mod drivers_license_tracker;
@@ -11,7 +11,7 @@ mod work_tracker;
 
 #[derive(Debug)]
 enum Page {
-    Home(HomeTab),
+    Home(Box<HomeTab>),
     Work(Box<WorkTab>),
     Führerschein(Box<DriverslicenseTab>),
     Settings(SettingsTab),
@@ -29,38 +29,36 @@ impl Tracker {
         let settings = AppSettings::load();
         settings.apply(&cc.egui_ctx);
 
+        let home = HomeTab::new(&settings.work_db(), &settings.dl_db());
         Self {
-            page: Page::Home(HomeTab::default()),
+            page: Page::Home(Box::new(home)),
             settings,
         }
     }
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
-        let data_dir = self.settings.data_dir.clone();
+        let work_db = self.settings.work_db();
+        let dl_db = self.settings.dl_db();
         ui.horizontal(|ui| {
             if ui
                 .selectable_label(matches!(self.page, Page::Home(_)), "Home")
                 .clicked()
             {
-                self.page = Page::Home(HomeTab::default());
+                self.page = Page::Home(Box::new(HomeTab::new(&work_db, &dl_db)));
             }
 
             if ui
                 .selectable_label(matches!(self.page, Page::Work(_)), "Work")
                 .clicked()
             {
-                self.page =
-                    Page::Work(Box::new(WorkTab::new(&format!("{}/work_tracker.db", data_dir))));
+                self.page = Page::Work(Box::new(WorkTab::new(&work_db)));
             }
 
             if ui
                 .selectable_label(matches!(self.page, Page::Führerschein(_)), "Führerschein")
                 .clicked()
             {
-                self.page = Page::Führerschein(Box::new(DriverslicenseTab::new(&format!(
-                    "{}/drivers_license.db",
-                    data_dir
-                ))));
+                self.page = Page::Führerschein(Box::new(DriverslicenseTab::new(&dl_db)));
             }
 
             if ui
@@ -78,7 +76,7 @@ impl Tracker {
     fn show_page(&mut self, ui: &mut egui::Ui) {
         let Tracker { page, settings } = self;
         match page {
-            Page::Home(page) => page.ui(ui),
+            Page::Home(page) => page.ui(ui, settings),
             Page::Work(page) => page.ui(ui, settings),
             Page::Führerschein(page) => page.ui(ui, settings),
             Page::Settings(page) => page.ui(ui, settings),
