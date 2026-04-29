@@ -155,6 +155,26 @@ impl DriversLicenseTracker {
             .collect()
     }
 
+    pub fn export_lessons_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(path)?;
+        writeln!(f, "id,date,lesson_type,instructor,notes")?;
+        for e in self.load_all_lessons() {
+            writeln!(f, "{},{},{},{},{}", e.id, e.date, e.lesson_type, e.instructor, e.notes)?;
+        }
+        Ok(())
+    }
+
+    pub fn export_expenses_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(path)?;
+        writeln!(f, "id,date,description,amount,category")?;
+        for e in self.load_all_expenses() {
+            writeln!(f, "{},{},{},{:.2},{}", e.id, e.date, e.description, e.amount, e.category)?;
+        }
+        Ok(())
+    }
+
     pub fn stats(&self) -> DriversLicenseStats {
         let lessons = self.load_all_lessons();
         let expenses = self.load_all_expenses();

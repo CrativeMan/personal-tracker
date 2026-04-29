@@ -1,6 +1,10 @@
-use crate::tabs::{DriverslicenseTab, HomeTab, SettingsTab, Tab, WorkTab};
+use crate::{
+    settings::AppSettings,
+    tabs::{DriverslicenseTab, HomeTab, SettingsTab, Tab, WorkTab},
+};
 
 mod drivers_license_tracker;
+mod settings;
 mod tabs;
 mod ui;
 mod work_tracker;
@@ -16,18 +20,23 @@ enum Page {
 #[derive(Debug)]
 struct Tracker {
     page: Page,
+    settings: AppSettings,
 }
 
 impl Tracker {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         egui_material_icons::initialize(&cc.egui_ctx);
+        let settings = AppSettings::load();
+        settings.apply(&cc.egui_ctx);
 
         Self {
             page: Page::Home(HomeTab::default()),
+            settings,
         }
     }
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
+        let data_dir = self.settings.data_dir.clone();
         ui.horizontal(|ui| {
             if ui
                 .selectable_label(matches!(self.page, Page::Home(_)), "Home")
@@ -40,14 +49,18 @@ impl Tracker {
                 .selectable_label(matches!(self.page, Page::Work(_)), "Work")
                 .clicked()
             {
-                self.page = Page::Work(Box::new(WorkTab::new()));
+                self.page =
+                    Page::Work(Box::new(WorkTab::new(&format!("{}/work_tracker.db", data_dir))));
             }
 
             if ui
                 .selectable_label(matches!(self.page, Page::Führerschein(_)), "Führerschein")
                 .clicked()
             {
-                self.page = Page::Führerschein(Box::new(DriverslicenseTab::new()));
+                self.page = Page::Führerschein(Box::new(DriverslicenseTab::new(&format!(
+                    "{}/drivers_license.db",
+                    data_dir
+                ))));
             }
 
             if ui
@@ -63,11 +76,12 @@ impl Tracker {
     }
 
     fn show_page(&mut self, ui: &mut egui::Ui) {
-        match &mut self.page {
+        let Tracker { page, settings } = self;
+        match page {
             Page::Home(page) => page.ui(ui),
-            Page::Work(page) => page.ui(ui),
-            Page::Führerschein(page) => page.ui(ui),
-            Page::Settings(page) => page.ui(ui),
+            Page::Work(page) => page.ui(ui, settings),
+            Page::Führerschein(page) => page.ui(ui, settings),
+            Page::Settings(page) => page.ui(ui, settings),
         }
     }
 }

@@ -3,6 +3,7 @@ use egui::{Id, Modal};
 
 use crate::{
     drivers_license_tracker::{DriversLicenseStats, DriversLicenseTracker, ExpenseEntry, LessonEntry},
+    settings::{AppSettings, ACCENT_PALETTE},
     ui::{bar_chart, bar_chart_money, metric_card},
     work_tracker::{WorkEntry, WorkStats, WorkTracker},
 };
@@ -27,12 +28,13 @@ pub struct WorkTab {
     to_delete: Option<i64>,
 
     stats: WorkStats,
+    export_status: Option<String>,
 }
 
 impl WorkTab {
-    pub fn new() -> Self {
+    pub fn new(db_path: &str) -> Self {
         Self {
-            work_tracker: WorkTracker::new("./work_tracker.db"),
+            work_tracker: WorkTracker::new(db_path),
             add_entry_modal: false,
             new_date_entry: String::new(),
             new_station_entry: String::new(),
@@ -41,6 +43,7 @@ impl WorkTab {
             dirty: true,
             to_delete: None,
             stats: WorkStats::default(),
+            export_status: None,
         }
     }
 }
@@ -78,12 +81,13 @@ pub struct DriverslicenseTab {
     expense_category_suggestions: Vec<String>,
 
     stats: DriversLicenseStats,
+    export_status: Option<String>,
 }
 
 impl DriverslicenseTab {
-    pub fn new() -> Self {
+    pub fn new(db_path: &str) -> Self {
         Self {
-            tracker: DriversLicenseTracker::new("./drivers_license.db"),
+            tracker: DriversLicenseTracker::new(db_path),
             view: DlView::Lessons,
             lesson_cache: Vec::new(),
             lesson_dirty: true,
@@ -104,6 +108,7 @@ impl DriverslicenseTab {
             new_expense_category: String::new(),
             expense_category_suggestions: Vec::new(),
             stats: DriversLicenseStats::default(),
+            export_status: None,
         }
     }
 
@@ -123,7 +128,7 @@ impl DriverslicenseTab {
         }
     }
 
-    fn stats_ui(&self, ui: &mut egui::Ui) {
+    fn stats_ui(&self, ui: &mut egui::Ui, settings: &AppSettings) {
         let s = &self.stats;
         ui.horizontal(|ui| {
             metric_card(ui, "Total lessons", &s.total_lessons.to_string(), None);
@@ -141,17 +146,28 @@ impl DriverslicenseTab {
 
         let max_type = s.by_lesson_type.first().map(|(_, n)| *n).unwrap_or(1);
         let max_cat = s.by_category.first().map(|(_, n)| *n).unwrap_or(1.0);
+        let accent = settings.accent();
 
         ui.columns(2, |cols| {
-            bar_chart(&mut cols[0], "By lesson type", &s.by_lesson_type, max_type);
-            bar_chart_money(&mut cols[1], "By expense category", &s.by_category, max_cat);
+            bar_chart(&mut cols[0], "By lesson type", &s.by_lesson_type, max_type, accent);
+            bar_chart_money(&mut cols[1], "By expense category", &s.by_category, max_cat, accent);
         });
     }
 
-    fn lessons_ui(&mut self, ui: &mut egui::Ui) {
+    fn lessons_ui(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         ui.horizontal(|ui| {
             if ui.button("New Lesson").clicked() {
                 self.add_lesson_modal = true;
+            }
+            if ui.button("Export CSV").clicked() {
+                let path = format!("{}/lessons_export.csv", settings.data_dir);
+                match self.tracker.export_lessons_csv(&path) {
+                    Ok(()) => self.export_status = Some(format!("Exported to {path}")),
+                    Err(e) => self.export_status = Some(format!("Error: {e}")),
+                }
+            }
+            if let Some(status) = &self.export_status {
+                ui.label(egui::RichText::new(status).small().weak());
             }
         });
 
@@ -162,7 +178,8 @@ impl DriverslicenseTab {
 
                 ui.horizontal(|ui| {
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.new_lesson_date).hint_text("Date"),
+                        egui::TextEdit::singleline(&mut self.new_lesson_date)
+                            .hint_text("Date (YYYY-MM-DD)"),
                     );
                     if ui.button("Today").clicked() {
                         self.new_lesson_date = chrono::Local::now().date_naive().to_string();
@@ -170,8 +187,7 @@ impl DriverslicenseTab {
                 });
 
                 ui.add(
-                    egui::TextEdit::singleline(&mut self.new_lesson_type)
-                        .hint_text("Lesson type"),
+                    egui::TextEdit::singleline(&mut self.new_lesson_type).hint_text("Lesson type"),
                 );
                 if !suggestions.is_empty() {
                     ui.horizontal_wrapped(|ui| {
@@ -193,9 +209,7 @@ impl DriverslicenseTab {
 
                 ui.separator();
                 if ui.button("Add").clicked() {
-                    if let Ok(date) =
-                        NaiveDate::parse_from_str(&self.new_lesson_date, "%Y-%m-%d")
-                    {
+                    if let Ok(date) = NaiveDate::parse_from_str(&self.new_lesson_date, "%Y-%m-%d") {
                         self.tracker.add_lesson(
                             date,
                             &self.new_lesson_type.clone(),
@@ -220,6 +234,9 @@ impl DriverslicenseTab {
 
         ui.separator();
 
+        let row_h = settings.row_height();
+        let hdr_h = settings.header_height();
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             egui_extras::TableBuilder::new(ui)
                 .striped(true)
@@ -229,7 +246,7 @@ impl DriverslicenseTab {
                 .column(egui_extras::Column::auto())
                 .column(egui_extras::Column::remainder())
                 .column(egui_extras::Column::auto())
-                .header(20.0, |mut header| {
+                .header(hdr_h, |mut header| {
                     header.col(|ui| { ui.label("Date"); });
                     header.col(|ui| { ui.label("Type"); });
                     header.col(|ui| { ui.label("Instructor"); });
@@ -238,8 +255,8 @@ impl DriverslicenseTab {
                 })
                 .body(|mut body| {
                     for entry in &self.lesson_cache {
-                        body.row(18.0, |mut row| {
-                            row.col(|ui| { ui.label(entry.date.to_string()); });
+                        body.row(row_h, |mut row| {
+                            row.col(|ui| { ui.label(settings.date_format.format(entry.date)); });
                             row.col(|ui| { ui.label(&entry.lesson_type); });
                             row.col(|ui| { ui.label(&entry.instructor); });
                             row.col(|ui| { ui.label(&entry.notes); });
@@ -263,10 +280,20 @@ impl DriverslicenseTab {
         }
     }
 
-    fn expenses_ui(&mut self, ui: &mut egui::Ui) {
+    fn expenses_ui(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         ui.horizontal(|ui| {
             if ui.button("New Expense").clicked() {
                 self.add_expense_modal = true;
+            }
+            if ui.button("Export CSV").clicked() {
+                let path = format!("{}/expenses_export.csv", settings.data_dir);
+                match self.tracker.export_expenses_csv(&path) {
+                    Ok(()) => self.export_status = Some(format!("Exported to {path}")),
+                    Err(e) => self.export_status = Some(format!("Error: {e}")),
+                }
+            }
+            if let Some(status) = &self.export_status {
+                ui.label(egui::RichText::new(status).small().weak());
             }
         });
 
@@ -278,7 +305,7 @@ impl DriverslicenseTab {
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.new_expense_date)
-                            .hint_text("Date"),
+                            .hint_text("Date (YYYY-MM-DD)"),
                     );
                     if ui.button("Today").clicked() {
                         self.new_expense_date = chrono::Local::now().date_naive().to_string();
@@ -336,6 +363,9 @@ impl DriverslicenseTab {
 
         ui.separator();
 
+        let row_h = settings.row_height();
+        let hdr_h = settings.header_height();
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             egui_extras::TableBuilder::new(ui)
                 .striped(true)
@@ -345,7 +375,7 @@ impl DriverslicenseTab {
                 .column(egui_extras::Column::auto())
                 .column(egui_extras::Column::auto())
                 .column(egui_extras::Column::auto())
-                .header(20.0, |mut header| {
+                .header(hdr_h, |mut header| {
                     header.col(|ui| { ui.label("Date"); });
                     header.col(|ui| { ui.label("Description"); });
                     header.col(|ui| { ui.label("Amount"); });
@@ -354,8 +384,8 @@ impl DriverslicenseTab {
                 })
                 .body(|mut body| {
                     for entry in &self.expense_cache {
-                        body.row(18.0, |mut row| {
-                            row.col(|ui| { ui.label(entry.date.to_string()); });
+                        body.row(row_h, |mut row| {
+                            row.col(|ui| { ui.label(settings.date_format.format(entry.date)); });
                             row.col(|ui| { ui.label(&entry.description); });
                             row.col(|ui| { ui.label(format!("€{:.2}", entry.amount)); });
                             row.col(|ui| { ui.label(&entry.category); });
@@ -378,10 +408,10 @@ impl DriverslicenseTab {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         self.reload_cache();
         self.stats = self.tracker.stats();
-        self.stats_ui(ui);
+        self.stats_ui(ui, settings);
         ui.separator();
 
         ui.horizontal(|ui| {
@@ -395,8 +425,8 @@ impl DriverslicenseTab {
         ui.separator();
 
         match self.view {
-            DlView::Lessons => self.lessons_ui(ui),
-            DlView::Expenses => self.expenses_ui(ui),
+            DlView::Lessons => self.lessons_ui(ui, settings),
+            DlView::Expenses => self.expenses_ui(ui, settings),
         }
     }
 }
@@ -413,12 +443,21 @@ impl Tab for HomeTab {
 }
 
 impl WorkTab {
-    fn work_entry_table(&mut self, ui: &mut egui::Ui) {
+    fn work_entry_table(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         self.reload_cache();
-        // ---- ADD NEW ENTRY ----
         ui.horizontal(|ui| {
             if ui.button("New Entry").clicked() {
                 self.add_entry_modal = true;
+            }
+            if ui.button("Export CSV").clicked() {
+                let path = format!("{}/work_export.csv", settings.data_dir);
+                match self.work_tracker.export_csv(&path) {
+                    Ok(()) => self.export_status = Some(format!("Exported to {path}")),
+                    Err(e) => self.export_status = Some(format!("Error: {e}")),
+                }
+            }
+            if let Some(status) = &self.export_status {
+                ui.label(egui::RichText::new(status).small().weak());
             }
         });
 
@@ -427,8 +466,10 @@ impl WorkTab {
                 ui.heading("New Work Entry");
 
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.new_date_entry).hint_text("Date"));
-
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.new_date_entry)
+                            .hint_text("Date (YYYY-MM-DD)"),
+                    );
                     if ui.button("Today").clicked() {
                         self.new_date_entry = chrono::Local::now().date_naive().to_string();
                     }
@@ -437,7 +478,6 @@ impl WorkTab {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.new_station_entry).hint_text("Station"),
                 );
-
                 ui.add(egui::TextEdit::singleline(&mut self.new_shift_entry).hint_text("Shift"));
                 ui.separator();
                 if ui.button("Add").clicked() {
@@ -463,7 +503,9 @@ impl WorkTab {
 
         ui.separator();
 
-        // ---- TABLE ----
+        let row_h = settings.row_height();
+        let hdr_h = settings.header_height();
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             egui_extras::TableBuilder::new(ui)
                 .striped(true)
@@ -472,35 +514,20 @@ impl WorkTab {
                 .column(egui_extras::Column::remainder())
                 .column(egui_extras::Column::auto())
                 .column(egui_extras::Column::auto())
-                .header(20.0, |mut header| {
-                    header.col(|ui| {
-                        ui.label("Date");
-                    });
-                    header.col(|ui| {
-                        ui.label("Station");
-                    });
-                    header.col(|ui| {
-                        ui.label("Shift");
-                    });
-                    header.col(|ui| {
-                        ui.label("Actions");
-                    });
+                .header(hdr_h, |mut header| {
+                    header.col(|ui| { ui.label("Date"); });
+                    header.col(|ui| { ui.label("Station"); });
+                    header.col(|ui| { ui.label("Shift"); });
+                    header.col(|ui| { ui.label("Actions"); });
                 })
                 .body(|mut body| {
                     for entry in &self.cache {
-                        body.row(18.0, |mut row| {
+                        body.row(row_h, |mut row| {
                             row.col(|ui| {
-                                ui.label(entry.date.to_string());
+                                ui.label(settings.date_format.format(entry.date));
                             });
-
-                            row.col(|ui| {
-                                ui.label(&entry.station);
-                            });
-
-                            row.col(|ui| {
-                                ui.label(&entry.shift);
-                            });
-
+                            row.col(|ui| { ui.label(&entry.station); });
+                            row.col(|ui| { ui.label(&entry.shift); });
                             row.col(|ui| {
                                 if ui.button("Delete").clicked() {
                                     self.to_delete = Some(entry.id);
@@ -518,10 +545,9 @@ impl WorkTab {
         }
     }
 
-    fn work_entry_stats(&mut self, ui: &mut egui::Ui) {
+    fn work_entry_stats(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
         let s = &self.stats;
 
-        // ── top metric cards ──────────────────────────────────────────
         ui.horizontal(|ui| {
             metric_card(ui, "Total shifts", &s.total_shifts.to_string(), None);
             metric_card(ui, "This month", &s.shifts_this_month.to_string(), None);
@@ -538,13 +564,13 @@ impl WorkTab {
 
         ui.add_space(8.0);
 
-        // ── bar charts ────────────────────────────────────────────────
         let max_station = s.by_station.first().map(|(_, n)| *n).unwrap_or(1);
         let max_shift = s.by_shift.first().map(|(_, n)| *n).unwrap_or(1);
+        let accent = settings.accent();
 
         ui.columns(2, |cols| {
-            bar_chart(&mut cols[0], "By station", &s.by_station, max_station);
-            bar_chart(&mut cols[1], "By shift", &s.by_shift, max_shift);
+            bar_chart(&mut cols[0], "By station", &s.by_station, max_station, accent);
+            bar_chart(&mut cols[1], "By shift", &s.by_shift, max_shift, accent);
         });
     }
 
@@ -556,13 +582,128 @@ impl WorkTab {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        self.work_entry_stats(ui);
+    pub fn ui(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
+        self.work_entry_stats(ui, settings);
         ui.separator();
-        self.work_entry_table(ui);
+        self.work_entry_table(ui, settings);
     }
 }
 
-impl Tab for SettingsTab {
-    fn ui(&mut self, _ui: &mut egui::Ui) {}
+impl SettingsTab {
+    pub fn ui(&mut self, ui: &mut egui::Ui, settings: &mut AppSettings) {
+        let mut changed = false;
+
+        ui.heading("Settings");
+        ui.add_space(8.0);
+
+        // ── Theme ──────────────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.label("Theme");
+            ui.add_space(8.0);
+            if ui.selectable_label(settings.dark_mode, "Dark").clicked() {
+                settings.dark_mode = true;
+                changed = true;
+            }
+            if ui.selectable_label(!settings.dark_mode, "Light").clicked() {
+                settings.dark_mode = false;
+                changed = true;
+            }
+        });
+
+        ui.add_space(4.0);
+
+        // ── Font size ──────────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.label("Font size");
+            ui.add_space(8.0);
+            if ui
+                .add(
+                    egui::Slider::new(&mut settings.pixels_per_point, 0.75..=2.0).step_by(0.25),
+                )
+                .changed()
+            {
+                changed = true;
+            }
+        });
+
+        ui.add_space(4.0);
+
+        // ── Date format ────────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            use crate::settings::DateFormat;
+            ui.label("Date format");
+            ui.add_space(8.0);
+            for fmt in [DateFormat::Iso, DateFormat::European, DateFormat::American] {
+                if ui
+                    .selectable_label(settings.date_format == fmt, fmt.label())
+                    .clicked()
+                {
+                    settings.date_format = fmt;
+                    changed = true;
+                }
+            }
+        });
+
+        ui.add_space(4.0);
+
+        // ── Accent color ───────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.label("Accent color");
+            ui.add_space(8.0);
+            for swatch in ACCENT_PALETTE {
+                let color = egui::Color32::from_rgb(swatch[0], swatch[1], swatch[2]);
+                let selected = settings.accent_color == swatch;
+                let (rect, resp) =
+                    ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
+                ui.painter().rect_filled(rect, 4.0, color);
+                if selected {
+                    ui.painter().rect_stroke(
+                        rect,
+                        4.0,
+                        egui::Stroke::new(2.0, egui::Color32::WHITE),
+                        egui::StrokeKind::Outside,
+                    );
+                }
+                if resp.clicked() {
+                    settings.accent_color = swatch;
+                    changed = true;
+                }
+            }
+        });
+
+        ui.add_space(4.0);
+
+        // ── Compact mode ───────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.label("Compact mode");
+            ui.add_space(8.0);
+            if ui.checkbox(&mut settings.compact_mode, "").changed() {
+                changed = true;
+            }
+        });
+
+        ui.add_space(4.0);
+
+        // ── Data directory ─────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.label("Data directory");
+            ui.add_space(8.0);
+            if ui
+                .add(egui::TextEdit::singleline(&mut settings.data_dir).desired_width(160.0))
+                .lost_focus()
+            {
+                changed = true;
+            }
+        });
+        ui.label(
+            egui::RichText::new("Restart the app to apply a new data directory.")
+                .small()
+                .weak(),
+        );
+
+        if changed {
+            settings.apply(ui.ctx());
+            settings.save();
+        }
+    }
 }

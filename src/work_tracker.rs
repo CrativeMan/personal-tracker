@@ -120,4 +120,14 @@ impl WorkTracker {
             .execute("DELETE FROM work_entries WHERE id = ?1", params![id])
             .unwrap();
     }
+
+    pub fn export_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(path)?;
+        writeln!(f, "id,date,station,shift")?;
+        for e in self.load_all() {
+            writeln!(f, "{},{},{},{}", e.id, e.date, e.station, e.shift)?;
+        }
+        Ok(())
+    }
 }
