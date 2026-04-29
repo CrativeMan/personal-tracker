@@ -13,6 +13,8 @@ mod settings;
 mod tabs;
 mod ui;
 mod work_tracker;
+#[cfg(test)]
+pub(crate) mod test_utils;
 
 #[derive(Debug)]
 enum Page {

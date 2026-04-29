@@ -109,5 +109,47 @@ impl AppSettings {
     pub fn header_height(&self) -> f32 {
         if self.compact_mode { 16.0 } else { 20.0 }
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::date;
+
+    #[test]
+    fn date_format_iso() {
+        assert_eq!(DateFormat::Iso.format(date(2024, 3, 5)), "2024-03-05");
+    }
+
+    #[test]
+    fn date_format_european() {
+        assert_eq!(DateFormat::European.format(date(2024, 3, 5)), "05.03.2024");
+    }
+
+    #[test]
+    fn date_format_american() {
+        assert_eq!(DateFormat::American.format(date(2024, 3, 5)), "03/05/2024");
+    }
+
+    #[test]
+    fn work_db_path() {
+        let s = AppSettings { data_dir: "/data".to_string(), ..Default::default() };
+        assert_eq!(s.work_db(), "/data/work_tracker.db");
+    }
+
+    #[test]
+    fn dl_db_path_strips_trailing_slash() {
+        let s = AppSettings { data_dir: "/data/".to_string(), ..Default::default() };
+        assert_eq!(s.dl_db(), "/data/drivers_license.db");
+    }
+
+    #[test]
+    fn row_and_header_heights() {
+        let normal = AppSettings { compact_mode: false, ..Default::default() };
+        let compact = AppSettings { compact_mode: true, ..Default::default() };
+        assert_eq!(normal.row_height(), 18.0);
+        assert_eq!(compact.row_height(), 14.0);
+        assert_eq!(normal.header_height(), 20.0);
+        assert_eq!(compact.header_height(), 16.0);
+    }
 }

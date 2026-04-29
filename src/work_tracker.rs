@@ -140,3 +140,126 @@ impl WorkTracker {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::{date, work_tracker};
+
+    #[test]
+    fn empty_db_has_no_entries() {
+        assert!(work_tracker().load_all().is_empty());
+    }
+
+    #[test]
+    fn add_and_load_roundtrip() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 3, 10), "Mitte", "Morning");
+        let entries = wt.load_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].date, date(2024, 3, 10));
+        assert_eq!(entries[0].station, "Mitte");
+        assert_eq!(entries[0].shift, "Morning");
+    }
+
+    #[test]
+    fn load_all_ordered_date_desc() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 1, 1), "A", "Morning");
+        wt.add(date(2024, 3, 1), "B", "Evening");
+        wt.add(date(2024, 2, 1), "C", "Night");
+        let entries = wt.load_all();
+        assert_eq!(entries[0].date, date(2024, 3, 1));
+        assert_eq!(entries[1].date, date(2024, 2, 1));
+        assert_eq!(entries[2].date, date(2024, 1, 1));
+    }
+
+    #[test]
+    fn delete_removes_entry() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 1, 1), "A", "Morning");
+        wt.add(date(2024, 1, 2), "B", "Evening");
+        let id = wt.load_all().into_iter().find(|e| e.station == "A").unwrap().id;
+        wt.delete(id);
+        let entries = wt.load_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].station, "B");
+    }
+
+    #[test]
+    fn update_changes_fields() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 1, 1), "Old", "Morning");
+        let id = wt.load_all()[0].id;
+        wt.update(id, date(2024, 6, 15), "New", "Night");
+        let entries = wt.load_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].station, "New");
+        assert_eq!(entries[0].shift, "Night");
+        assert_eq!(entries[0].date, date(2024, 6, 15));
+    }
+
+    #[test]
+    fn stats_on_empty_db() {
+        let s = work_tracker().stats();
+        assert_eq!(s.total_shifts, 0);
+        assert_eq!(s.unique_stations, 0);
+        assert!(s.most_common_shift.is_none());
+    }
+
+    #[test]
+    fn stats_totals_and_uniques() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 1, 1), "A", "Morning");
+        wt.add(date(2024, 1, 2), "B", "Morning");
+        wt.add(date(2024, 1, 3), "A", "Evening");
+        let s = wt.stats();
+        assert_eq!(s.total_shifts, 3);
+        assert_eq!(s.unique_stations, 2);
+    }
+
+    #[test]
+    fn stats_this_month_only_counts_current_month() {
+        let today = chrono::Local::now().date_naive();
+        let mut wt = work_tracker();
+        wt.add(today, "A", "Morning");
+        wt.add(today, "B", "Evening");
+        wt.add(date(2000, 1, 1), "C", "Night");
+        let s = wt.stats();
+        assert_eq!(s.shifts_this_month, 2);
+        assert_eq!(s.total_shifts, 3);
+    }
+
+    #[test]
+    fn stats_most_common_shift() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 1, 1), "A", "Morning");
+        wt.add(date(2024, 1, 2), "B", "Morning");
+        wt.add(date(2024, 1, 3), "A", "Evening");
+        let (shift, count) = wt.stats().most_common_shift.unwrap();
+        assert_eq!(shift, "Morning");
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn stats_by_station_sorted_desc() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 1, 1), "B", "Morning");
+        wt.add(date(2024, 1, 2), "A", "Morning");
+        wt.add(date(2024, 1, 3), "A", "Evening");
+        let s = wt.stats();
+        assert_eq!(s.by_station[0], ("A".to_string(), 2));
+        assert_eq!(s.by_station[1], ("B".to_string(), 1));
+    }
+
+    #[test]
+    fn export_csv_writes_header_and_rows() {
+        let mut wt = work_tracker();
+        wt.add(date(2024, 3, 10), "Mitte", "Morning");
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        wt.export_csv(tmp.path().to_str().unwrap()).unwrap();
+        let contents = std::fs::read_to_string(tmp.path()).unwrap();
+        let lines: Vec<&str> = contents.lines().collect();
+        assert_eq!(lines[0], "id,date,station,shift");
+        assert!(lines[1].contains("2024-03-10,Mitte,Morning"));
+    }
+}
