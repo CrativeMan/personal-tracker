@@ -13,6 +13,7 @@ mod settings;
 mod tabs;
 mod ui;
 mod work_tracker;
+mod dienstplan;
 #[cfg(test)]
 pub(crate) mod test_utils;
 

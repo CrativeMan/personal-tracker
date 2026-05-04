@@ -33,61 +33,65 @@ pub struct DriversLicenseStats {
 
 #[derive(Debug)]
 pub struct DriversLicenseTracker {
-    conn: Connection,
+    conn: Option<Connection>,
 }
 
 impl DriversLicenseTracker {
     pub fn new(path: &str) -> Self {
-        let conn = Connection::open(path).expect("db open failed");
-
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS dl_lessons (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                lesson_type TEXT NOT NULL,
-                instructor TEXT NOT NULL,
-                notes TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS dl_expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                description TEXT NOT NULL,
-                amount REAL NOT NULL,
-                category TEXT NOT NULL
-            );",
-        )
-        .unwrap();
-
+        let conn = Connection::open(path).ok().and_then(|conn| {
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS dl_lessons (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    lesson_type TEXT NOT NULL,
+                    instructor TEXT NOT NULL,
+                    notes TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS dl_expenses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    category TEXT NOT NULL
+                );",
+            )
+            .ok()?;
+            Some(conn)
+        });
         Self { conn }
     }
 
+    pub fn is_connected(&self) -> bool {
+        self.conn.is_some()
+    }
+
     pub fn add_lesson(&mut self, date: NaiveDate, lesson_type: &str, instructor: &str, notes: &str) {
-        self.conn
-            .execute(
-                "INSERT INTO dl_lessons (date, lesson_type, instructor, notes) VALUES (?1, ?2, ?3, ?4)",
-                params![date.format("%Y-%m-%d").to_string(), lesson_type, instructor, notes],
-            )
-            .unwrap();
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute(
+            "INSERT INTO dl_lessons (date, lesson_type, instructor, notes) VALUES (?1, ?2, ?3, ?4)",
+            params![date.format("%Y-%m-%d").to_string(), lesson_type, instructor, notes],
+        )
+        .unwrap();
     }
 
     pub fn delete_lesson(&mut self, id: i64) {
-        self.conn
-            .execute("DELETE FROM dl_lessons WHERE id = ?1", params![id])
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute("DELETE FROM dl_lessons WHERE id = ?1", params![id])
             .unwrap();
     }
 
     pub fn update_lesson(&mut self, id: i64, date: NaiveDate, lesson_type: &str, instructor: &str, notes: &str) {
-        self.conn
-            .execute(
-                "UPDATE dl_lessons SET date=?1, lesson_type=?2, instructor=?3, notes=?4 WHERE id=?5",
-                params![date.format("%Y-%m-%d").to_string(), lesson_type, instructor, notes, id],
-            )
-            .unwrap();
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute(
+            "UPDATE dl_lessons SET date=?1, lesson_type=?2, instructor=?3, notes=?4 WHERE id=?5",
+            params![date.format("%Y-%m-%d").to_string(), lesson_type, instructor, notes, id],
+        )
+        .unwrap();
     }
 
     pub fn load_all_lessons(&self) -> Vec<LessonEntry> {
-        let mut stmt = self
-            .conn
+        let Some(conn) = &self.conn else { return vec![]; };
+        let mut stmt = conn
             .prepare("SELECT id, date, lesson_type, instructor, notes FROM dl_lessons ORDER BY date DESC")
             .unwrap();
 
@@ -106,8 +110,8 @@ impl DriversLicenseTracker {
     }
 
     pub fn unique_lesson_types(&self) -> Vec<String> {
-        let mut stmt = self
-            .conn
+        let Some(conn) = &self.conn else { return vec![]; };
+        let mut stmt = conn
             .prepare("SELECT DISTINCT lesson_type FROM dl_lessons ORDER BY lesson_type")
             .unwrap();
 
@@ -118,32 +122,32 @@ impl DriversLicenseTracker {
     }
 
     pub fn add_expense(&mut self, date: NaiveDate, description: &str, amount: f64, category: &str) {
-        self.conn
-            .execute(
-                "INSERT INTO dl_expenses (date, description, amount, category) VALUES (?1, ?2, ?3, ?4)",
-                params![date.format("%Y-%m-%d").to_string(), description, amount, category],
-            )
-            .unwrap();
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute(
+            "INSERT INTO dl_expenses (date, description, amount, category) VALUES (?1, ?2, ?3, ?4)",
+            params![date.format("%Y-%m-%d").to_string(), description, amount, category],
+        )
+        .unwrap();
     }
 
     pub fn delete_expense(&mut self, id: i64) {
-        self.conn
-            .execute("DELETE FROM dl_expenses WHERE id = ?1", params![id])
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute("DELETE FROM dl_expenses WHERE id = ?1", params![id])
             .unwrap();
     }
 
     pub fn update_expense(&mut self, id: i64, date: NaiveDate, description: &str, amount: f64, category: &str) {
-        self.conn
-            .execute(
-                "UPDATE dl_expenses SET date=?1, description=?2, amount=?3, category=?4 WHERE id=?5",
-                params![date.format("%Y-%m-%d").to_string(), description, amount, category, id],
-            )
-            .unwrap();
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute(
+            "UPDATE dl_expenses SET date=?1, description=?2, amount=?3, category=?4 WHERE id=?5",
+            params![date.format("%Y-%m-%d").to_string(), description, amount, category, id],
+        )
+        .unwrap();
     }
 
     pub fn load_all_expenses(&self) -> Vec<ExpenseEntry> {
-        let mut stmt = self
-            .conn
+        let Some(conn) = &self.conn else { return vec![]; };
+        let mut stmt = conn
             .prepare("SELECT id, date, description, amount, category FROM dl_expenses ORDER BY date DESC")
             .unwrap();
 
@@ -162,8 +166,8 @@ impl DriversLicenseTracker {
     }
 
     pub fn unique_expense_categories(&self) -> Vec<String> {
-        let mut stmt = self
-            .conn
+        let Some(conn) = &self.conn else { return vec![]; };
+        let mut stmt = conn
             .prepare("SELECT DISTINCT category FROM dl_expenses ORDER BY category")
             .unwrap();
 
@@ -174,6 +178,9 @@ impl DriversLicenseTracker {
     }
 
     pub fn export_lessons_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if self.conn.is_none() {
+            return Err("No database connection".into());
+        }
         use std::io::Write;
         let mut f = std::fs::File::create(path)?;
         writeln!(f, "id,date,lesson_type,instructor,notes")?;
@@ -184,6 +191,9 @@ impl DriversLicenseTracker {
     }
 
     pub fn export_expenses_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if self.conn.is_none() {
+            return Err("No database connection".into());
+        }
         use std::io::Write;
         let mut f = std::fs::File::create(path)?;
         writeln!(f, "id,date,description,amount,category")?;

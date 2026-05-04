@@ -97,6 +97,11 @@ impl AppSettings {
         format!("{}/drivers_license.db", self.data_dir.trim_end_matches('/'))
     }
 
+    pub fn output_dir(&self) -> String {
+   		std::fs::create_dir_all(format!("{}/output", self.data_dir.trim_end_matches("/"))).ok();
+        format!("{}/output", self.data_dir.trim_end_matches("/"))
+    }
+
     pub fn accent(&self) -> egui::Color32 {
         let [r, g, b] = self.accent_color;
         egui::Color32::from_rgb(r, g, b)
@@ -133,20 +138,32 @@ mod tests {
 
     #[test]
     fn work_db_path() {
-        let s = AppSettings { data_dir: "/data".to_string(), ..Default::default() };
+        let s = AppSettings {
+            data_dir: "/data".to_string(),
+            ..Default::default()
+        };
         assert_eq!(s.work_db(), "/data/work_tracker.db");
     }
 
     #[test]
     fn dl_db_path_strips_trailing_slash() {
-        let s = AppSettings { data_dir: "/data/".to_string(), ..Default::default() };
+        let s = AppSettings {
+            data_dir: "/data/".to_string(),
+            ..Default::default()
+        };
         assert_eq!(s.dl_db(), "/data/drivers_license.db");
     }
 
     #[test]
     fn row_and_header_heights() {
-        let normal = AppSettings { compact_mode: false, ..Default::default() };
-        let compact = AppSettings { compact_mode: true, ..Default::default() };
+        let normal = AppSettings {
+            compact_mode: false,
+            ..Default::default()
+        };
+        let compact = AppSettings {
+            compact_mode: true,
+            ..Default::default()
+        };
         assert_eq!(normal.row_height(), 18.0);
         assert_eq!(compact.row_height(), 14.0);
         assert_eq!(normal.header_height(), 20.0);

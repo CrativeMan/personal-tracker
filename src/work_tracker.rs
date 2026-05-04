@@ -24,25 +24,29 @@ pub struct WorkStats {
 
 #[derive(Debug)]
 pub struct WorkTracker {
-    conn: Connection,
+    conn: Option<Connection>,
 }
 
 impl WorkTracker {
     pub fn new(path: &str) -> Self {
-        let conn = Connection::open(path).expect("db open failed");
-
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS work_entries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                station TEXT NOT NULL,
-                shift TEXT NOT NULL
-            )",
-            [],
-        )
-        .unwrap();
-
+        let conn = Connection::open(path).ok().and_then(|conn| {
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS work_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    station TEXT NOT NULL,
+                    shift TEXT NOT NULL
+                )",
+                [],
+            )
+            .ok()?;
+            Some(conn)
+        });
         Self { conn }
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.conn.is_some()
     }
 
     pub fn stats(&self) -> WorkStats {
@@ -87,8 +91,8 @@ impl WorkTracker {
     }
 
     pub fn load_all(&self) -> Vec<WorkEntry> {
-        let mut stmt = self
-            .conn
+        let Some(conn) = &self.conn else { return vec![]; };
+        let mut stmt = conn
             .prepare("SELECT id, date, station, shift FROM work_entries ORDER BY date DESC")
             .unwrap();
 
@@ -107,30 +111,33 @@ impl WorkTracker {
     }
 
     pub fn add(&mut self, date: NaiveDate, station: &str, shift: &str) {
-        self.conn
-            .execute(
-                "INSERT INTO work_entries (date, station, shift) VALUES (?1, ?2, ?3)",
-                params![date.format("%Y-%m-%d").to_string(), station, shift],
-            )
-            .unwrap();
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute(
+            "INSERT INTO work_entries (date, station, shift) VALUES (?1, ?2, ?3)",
+            params![date.format("%Y-%m-%d").to_string(), station, shift],
+        )
+        .unwrap();
     }
 
     pub fn delete(&mut self, id: i64) {
-        self.conn
-            .execute("DELETE FROM work_entries WHERE id = ?1", params![id])
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute("DELETE FROM work_entries WHERE id = ?1", params![id])
             .unwrap();
     }
 
     pub fn update(&mut self, id: i64, date: NaiveDate, station: &str, shift: &str) {
-        self.conn
-            .execute(
-                "UPDATE work_entries SET date=?1, station=?2, shift=?3 WHERE id=?4",
-                params![date.format("%Y-%m-%d").to_string(), station, shift, id],
-            )
-            .unwrap();
+        let Some(conn) = &mut self.conn else { return; };
+        conn.execute(
+            "UPDATE work_entries SET date=?1, station=?2, shift=?3 WHERE id=?4",
+            params![date.format("%Y-%m-%d").to_string(), station, shift, id],
+        )
+        .unwrap();
     }
 
     pub fn export_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if self.conn.is_none() {
+            return Err("No database connection".into());
+        }
         use std::io::Write;
         let mut f = std::fs::File::create(path)?;
         writeln!(f, "id,date,station,shift")?;

@@ -60,6 +60,7 @@
               ruff
               docker
               sqlx-cli
+              poppler-utils
             ]
             ++ guiLibs;
 

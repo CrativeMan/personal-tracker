@@ -726,6 +726,13 @@ impl DriverslicenseTab {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
+        if !self.tracker.is_connected() {
+            ui.colored_label(
+                egui::Color32::from_rgb(0xF5, 0x9E, 0x0B),
+                "No database — set a valid data directory in Settings and restart.",
+            );
+            return;
+        }
         self.reload_cache();
         self.stats = self.tracker.stats();
         self.stats_ui(ui, settings);

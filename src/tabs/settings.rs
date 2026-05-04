@@ -107,6 +107,14 @@ impl SettingsTab {
             {
                 changed = true;
             }
+            if ui.button("Browse…").clicked()
+                && let Some(path) = rfd::FileDialog::new()
+                    .set_directory(&settings.data_dir)
+                    .pick_folder()
+                {
+                    settings.data_dir = path.to_string_lossy().to_string();
+                    changed = true;
+                }
         });
         ui.label(
             egui::RichText::new("Restart the app to apply a new data directory.")
