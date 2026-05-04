@@ -112,13 +112,10 @@ fn extract_pdf_text(path: &Path) -> io::Result<String> {
         })?;
 
     if !output.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "pdftotext exited with status {}",
-                output.status
-            ),
-        ));
+        return Err(io::Error::other(format!(
+            "pdftotext exited with status {}",
+            output.status
+        )));
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
@@ -131,29 +128,19 @@ fn parse_dienstplan(text: &str) -> (DienstplanMeta, Vec<ShiftEntry>) {
 
     let re_mitarbeiter = Regex::new(r"Mitarbeiter:\s+([\w,\s]+?)\s{2,}").unwrap();
     let re_mandant = Regex::new(r"Mandant:\s+(.+)").unwrap();
-    let re_station_header =
-        Regex::new(r"Station/Bereich:\s+(\S+(?:\s+\S+)?)").unwrap();
-    let re_zeitraum = Regex::new(
-        r"Zeitraum:\s+(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})",
-    )
-    .unwrap();
+    let re_station_header = Regex::new(r"Station/Bereich:\s+(\S+(?:\s+\S+)?)").unwrap();
+    let re_zeitraum =
+        Regex::new(r"Zeitraum:\s+(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})").unwrap();
     let re_shift = Regex::new(
         r"^\s*(Mo|Di|Mi|Do|Fr|Sa|So)\s+(\d{2}\.\d{2}\.\d{4})\s+(\S+)\s+(\d{2}:\d{2}-\d{2}:\d{2})\s+([\d,]+)\s*([\d,]*)\s*(.*?)\s*$",
     )
     .unwrap();
-    let re_off = Regex::new(
-        r"^\s*(Mo|Di|Mi|Do|Fr|Sa|So)\s+(\d{2}\.\d{2}\.\d{4})\s+x\s*$",
-    )
-    .unwrap();
+    let re_off = Regex::new(r"^\s*(Mo|Di|Mi|Do|Fr|Sa|So)\s+(\d{2}\.\d{2}\.\d{4})\s+x\s*$").unwrap();
     let re_ist = Regex::new(r"IST-Arbeitszeit\s+([\d,.-]+)\s+Std").unwrap();
-    let re_soll =
-        Regex::new(r"Vertr\. Sollarbeitszeit\s+([\d,.-]+)\s+Std").unwrap();
-    let re_saldo =
-        Regex::new(r"Saldo lfd\. Monat\s+([\d,.-]+)\s+Std").unwrap();
-    let re_urlaub =
-        Regex::new(r"Urlaubsanspruch lfd\. Jahr\s+(\d+)\s+Tag").unwrap();
-    let re_resturlaub =
-        Regex::new(r"Resturlaub zu Jahresende\s+(\d+)\s+Tag").unwrap();
+    let re_soll = Regex::new(r"Vertr\. Sollarbeitszeit\s+([\d,.-]+)\s+Std").unwrap();
+    let re_saldo = Regex::new(r"Saldo lfd\. Monat\s+([\d,.-]+)\s+Std").unwrap();
+    let re_urlaub = Regex::new(r"Urlaubsanspruch lfd\. Jahr\s+(\d+)\s+Tag").unwrap();
+    let re_resturlaub = Regex::new(r"Resturlaub zu Jahresende\s+(\d+)\s+Tag").unwrap();
 
     for line in text.lines() {
         if let Some(c) = re_mitarbeiter.captures(line) {
@@ -162,10 +149,10 @@ fn parse_dienstplan(text: &str) -> (DienstplanMeta, Vec<ShiftEntry>) {
         if let Some(c) = re_mandant.captures(line) {
             meta.mandant = c[1].trim().to_string();
         }
-        if let Some(c) = re_station_header.captures(line) {
-            if meta.station.is_empty() {
-                meta.station = c[1].trim().to_string();
-            }
+        if let Some(c) = re_station_header.captures(line)
+            && meta.station.is_empty()
+        {
+            meta.station = c[1].trim().to_string();
         }
         if let Some(c) = re_zeitraum.captures(line) {
             meta.zeitraum_start = parse_date_de(&c[1]);
@@ -187,47 +174,46 @@ fn parse_dienstplan(text: &str) -> (DienstplanMeta, Vec<ShiftEntry>) {
             meta.resturlaub = c[1].trim().parse().ok();
         }
 
-        if let Some(c) = re_off.captures(line) {
-            if let Some(date) = parse_date_de(&c[2]) {
-                entries.push(ShiftEntry {
-                    weekday: c[1].to_string(),
-                    date,
-                    kuerzel: "x".to_string(),
-                    start_time: None,
-                    end_time: None,
-                    arbeit: None,
-                    umkle: None,
-                    bemerkung: String::new(),
-                    station: String::new(),
-                    is_off: true,
-                });
-                continue;
-            }
+        if let Some(c) = re_off.captures(line)
+            && let Some(date) = parse_date_de(&c[2])
+        {
+            entries.push(ShiftEntry {
+                weekday: c[1].to_string(),
+                date,
+                kuerzel: "x".to_string(),
+                start_time: None,
+                end_time: None,
+                arbeit: None,
+                umkle: None,
+                bemerkung: String::new(),
+                station: String::new(),
+                is_off: true,
+            });
+            continue;
         }
 
-        if let Some(c) = re_shift.captures(line) {
-            if let Some(date) = parse_date_de(&c[2]) {
-                let (start, end) = parse_time_range(&c[4]);
-                let trailing = c[7].trim().to_string();
-                let (bemerkung, station) =
-                    split_bemerkung_station(&trailing, &meta.station);
-                entries.push(ShiftEntry {
-                    weekday: c[1].to_string(),
-                    date,
-                    kuerzel: c[3].to_string(),
-                    start_time: start,
-                    end_time: end,
-                    arbeit: parse_decimal_de(&c[5]),
-                    umkle: if c[6].trim().is_empty() {
-                        None
-                    } else {
-                        parse_decimal_de(&c[6])
-                    },
-                    bemerkung,
-                    station,
-                    is_off: false,
-                });
-            }
+        if let Some(c) = re_shift.captures(line)
+            && let Some(date) = parse_date_de(&c[2])
+        {
+            let (start, end) = parse_time_range(&c[4]);
+            let trailing = c[7].trim().to_string();
+            let (bemerkung, station) = split_bemerkung_station(&trailing, &meta.station);
+            entries.push(ShiftEntry {
+                weekday: c[1].to_string(),
+                date,
+                kuerzel: c[3].to_string(),
+                start_time: start,
+                end_time: end,
+                arbeit: parse_decimal_de(&c[5]),
+                umkle: if c[6].trim().is_empty() {
+                    None
+                } else {
+                    parse_decimal_de(&c[6])
+                },
+                bemerkung,
+                station,
+                is_off: false,
+            });
         }
     }
 
@@ -264,11 +250,7 @@ fn parse_time_range(s: &str) -> (Option<NaiveTime>, Option<NaiveTime>) {
 }
 
 fn build_base_name(meta: &DienstplanMeta) -> String {
-    let name = meta
-        .mitarbeiter
-        .replace(", ", "_")
-        .replace(' ', "_")
-        .replace('/', "_");
+    let name = meta.mitarbeiter.replace(", ", "_").replace([' ', '/'], "_");
     if let Some(start) = meta.zeitraum_start {
         format!("{}_{}", name, start.format("%Y-%m"))
     } else {
@@ -289,15 +271,33 @@ fn write_csv(
     writeln!(f, "# Mandant,{}", meta.mandant)?;
     writeln!(f, "# Station,{}", meta.station)?;
     if let (Some(s), Some(e)) = (meta.zeitraum_start, meta.zeitraum_end) {
-        writeln!(f, "# Zeitraum,{},{}", s.format("%d.%m.%Y"), e.format("%d.%m.%Y"))?;
+        writeln!(
+            f,
+            "# Zeitraum,{},{}",
+            s.format("%d.%m.%Y"),
+            e.format("%d.%m.%Y")
+        )?;
     }
-    if let Some(h) = meta.ist_arbeitszeit  { writeln!(f, "# IST-Arbeitszeit,{h:.2}")?; }
-    if let Some(h) = meta.soll_arbeitszeit { writeln!(f, "# Sollarbeitszeit,{h:.2}")?; }
-    if let Some(h) = meta.saldo_monat      { writeln!(f, "# Saldo,{h:.2}")?; }
-    if let Some(u) = meta.urlaubsanspruch  { writeln!(f, "# Urlaubsanspruch,{u}")?; }
-    if let Some(r) = meta.resturlaub       { writeln!(f, "# Resturlaub_Jahresende,{r}")?; }
+    if let Some(h) = meta.ist_arbeitszeit {
+        writeln!(f, "# IST-Arbeitszeit,{h:.2}")?;
+    }
+    if let Some(h) = meta.soll_arbeitszeit {
+        writeln!(f, "# Sollarbeitszeit,{h:.2}")?;
+    }
+    if let Some(h) = meta.saldo_monat {
+        writeln!(f, "# Saldo,{h:.2}")?;
+    }
+    if let Some(u) = meta.urlaubsanspruch {
+        writeln!(f, "# Urlaubsanspruch,{u}")?;
+    }
+    if let Some(r) = meta.resturlaub {
+        writeln!(f, "# Resturlaub_Jahresende,{r}")?;
+    }
 
-    writeln!(f, "Wochentag,Datum,Kuerzel,Dienstbeginn,Dienstende,Arbeit_Std,Umkleide_Std,Bemerkung,Station,Frei")?;
+    writeln!(
+        f,
+        "Wochentag,Datum,Kuerzel,Dienstbeginn,Dienstende,Arbeit_Std,Umkleide_Std,Bemerkung,Station,Frei"
+    )?;
     for e in entries {
         if skip_off && e.is_off {
             continue;
@@ -308,8 +308,12 @@ fn write_csv(
             e.weekday,
             e.date.format("%d.%m.%Y"),
             e.kuerzel,
-            e.start_time.map(|t| t.format("%H:%M").to_string()).unwrap_or_default(),
-            e.end_time.map(|t| t.format("%H:%M").to_string()).unwrap_or_default(),
+            e.start_time
+                .map(|t| t.format("%H:%M").to_string())
+                .unwrap_or_default(),
+            e.end_time
+                .map(|t| t.format("%H:%M").to_string())
+                .unwrap_or_default(),
             e.arbeit.map(|v| format!("{v:.2}")).unwrap_or_default(),
             e.umkle.map(|v| format!("{v:.2}")).unwrap_or_default(),
             e.bemerkung.replace('"', "\"\""),
@@ -358,7 +362,9 @@ fn write_ics(
     let dtstamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
 
     for e in entries {
-        if e.is_off { continue; }
+        if e.is_off {
+            continue;
+        }
         let (start, end) = match (e.start_time, e.end_time) {
             (Some(s), Some(en)) => (s, en),
             _ => continue,
@@ -371,9 +377,23 @@ fn write_ics(
         writeln!(f, "BEGIN:VEVENT")?;
         writeln!(f, "UID:{}", Uuid::new_v4())?;
         writeln!(f, "DTSTAMP:{dtstamp}")?;
-        writeln!(f, "DTSTART;TZID=Europe/Berlin:{}T{}", e.date.format("%Y%m%d"), start.format("%H%M%S"))?;
-        writeln!(f, "DTEND;TZID=Europe/Berlin:{}T{}", end_date.format("%Y%m%d"), end.format("%H%M%S"))?;
-        writeln!(f, "SUMMARY:{}", ics_escape(&build_summary(prefix, &e.kuerzel, &e.bemerkung)))?;
+        writeln!(
+            f,
+            "DTSTART;TZID=Europe/Berlin:{}T{}",
+            e.date.format("%Y%m%d"),
+            start.format("%H%M%S")
+        )?;
+        writeln!(
+            f,
+            "DTEND;TZID=Europe/Berlin:{}T{}",
+            end_date.format("%Y%m%d"),
+            end.format("%H%M%S")
+        )?;
+        writeln!(
+            f,
+            "SUMMARY:{}",
+            ics_escape(&build_summary(prefix, &e.kuerzel, &e.bemerkung))
+        )?;
         writeln!(f, "DESCRIPTION:{}", ics_escape(&build_description(e, meta)))?;
         writeln!(f, "LOCATION:{}", ics_escape(&e.station))?;
         writeln!(f, "CATEGORIES:Dienst")?;
@@ -398,12 +418,20 @@ fn build_description(e: &ShiftEntry, meta: &DienstplanMeta) -> String {
         format!("Dienstart: {}", e.kuerzel),
         format!("Station: {}", e.station),
     ];
-    if let Some(h) = e.arbeit { parts.push(format!("Arbeitszeit: {h:.2} Std")); }
-    if let Some(u) = e.umkle  { parts.push(format!("Umkleidezeit: {u:.2} Std")); }
-    if !e.bemerkung.is_empty() { parts.push(format!("Bemerkung: {}", e.bemerkung)); }
+    if let Some(h) = e.arbeit {
+        parts.push(format!("Arbeitszeit: {h:.2} Std"));
+    }
+    if let Some(u) = e.umkle {
+        parts.push(format!("Umkleidezeit: {u:.2} Std"));
+    }
+    if !e.bemerkung.is_empty() {
+        parts.push(format!("Bemerkung: {}", e.bemerkung));
+    }
     parts.join("\\n")
 }
 
 fn ics_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace(';', "\\;").replace(',', "\\,")
+    s.replace('\\', "\\\\")
+        .replace(';', "\\;")
+        .replace(',', "\\,")
 }

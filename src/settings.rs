@@ -87,6 +87,17 @@ impl AppSettings {
             ctx.set_visuals(egui::Visuals::light());
         }
         ctx.set_pixels_per_point(self.pixels_per_point);
+        ctx.global_style_mut(|style| {
+            if self.compact_mode {
+                style.spacing.item_spacing = egui::vec2(4.0, 2.0);
+                style.spacing.button_padding = egui::vec2(3.0, 1.0);
+                style.spacing.window_margin = egui::Margin::same(4);
+            } else {
+                style.spacing.item_spacing = egui::vec2(8.0, 3.0);
+                style.spacing.button_padding = egui::vec2(4.0, 2.0);
+                style.spacing.window_margin = egui::Margin::same(6);
+            }
+        });
     }
 
     pub fn work_db(&self) -> String {
@@ -95,11 +106,6 @@ impl AppSettings {
 
     pub fn dl_db(&self) -> String {
         format!("{}/drivers_license.db", self.data_dir.trim_end_matches('/'))
-    }
-
-    pub fn output_dir(&self) -> String {
-   		std::fs::create_dir_all(format!("{}/output", self.data_dir.trim_end_matches("/"))).ok();
-        format!("{}/output", self.data_dir.trim_end_matches("/"))
     }
 
     pub fn accent(&self) -> egui::Color32 {

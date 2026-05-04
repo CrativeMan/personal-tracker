@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use egui::{Id, Modal};
 use egui_material_icons::icons::{
-    ICON_ADD, ICON_DELETE, ICON_DOWNLOAD, ICON_EDIT, ICON_FILE_OPEN, ICON_HELP_CLINIC,
+    ICON_ADD, ICON_DELETE, ICON_DOWNLOAD, ICON_EDIT, ICON_FILE_OPEN,
 };
 
 use crate::{
@@ -44,6 +44,9 @@ pub struct WorkTab {
     filter_from: String,
     filter_to: String,
 
+    station_suggestions: Vec<String>,
+    shift_suggestions: Vec<String>,
+
     stats: WorkStats,
     export_status: ExportStatus,
 }
@@ -71,6 +74,8 @@ impl WorkTab {
             filter_text: String::new(),
             filter_from: String::new(),
             filter_to: String::new(),
+            station_suggestions: Vec::new(),
+            shift_suggestions: Vec::new(),
             stats: WorkStats::default(),
             export_status: ExportStatus::default(),
         }
@@ -125,14 +130,13 @@ impl WorkTab {
                     };
                     ui.label(display);
                     ui.add_space(8.0);
-                    if ui.button(icon_label(ICON_FILE_OPEN, "Browse…")).clicked() {
-                        if let Some(path) = rfd::FileDialog::new()
+                    if ui.button(icon_label(ICON_FILE_OPEN, "Browse…")).clicked()
+                        && let Some(path) = rfd::FileDialog::new()
                             .add_filter("PDF", &["pdf"])
                             .pick_file()
-                        {
-                            self.pdf_path = path.to_string_lossy().to_string();
-                            self.modal_error = None;
-                        }
+                    {
+                        self.pdf_path = path.to_string_lossy().to_string();
+                        self.modal_error = None;
                     }
                 });
 
@@ -146,13 +150,14 @@ impl WorkTab {
                     let ready = !self.pdf_path.is_empty() && (self.convert_csv || self.convert_ics);
                     ui.add_enabled_ui(ready, |ui| {
                         if ui.button(icon_label(ICON_DOWNLOAD, "Convert")).clicked() {
-                            let result = crate::dienstplan::convert(crate::dienstplan::ConvertOptions {
-                                pdf_path: std::path::PathBuf::from(&self.pdf_path),
-                                output_dir: None, // writes next to the PDF
-                                write_csv: self.convert_csv,
-                                write_ics: self.convert_ics,
-                                event_prefix: "Dienst".to_string(),
-                            });
+                            let result =
+                                crate::dienstplan::convert(crate::dienstplan::ConvertOptions {
+                                    pdf_path: std::path::PathBuf::from(&self.pdf_path),
+                                    output_dir: None, // writes next to the PDF
+                                    write_csv: self.convert_csv,
+                                    write_ics: self.convert_ics,
+                                    event_prefix: "Dienst".to_string(),
+                                });
                             match result {
                                 Err(e) => {
                                     self.modal_error = Some(format!("Conversion failed: {e}"));
@@ -192,6 +197,8 @@ impl WorkTab {
 
         // Add modal
         if self.add_entry_modal {
+            let station_suggestions = self.station_suggestions.clone();
+            let shift_suggestions = self.shift_suggestions.clone();
             let modal = Modal::new(Id::new("work_add_modal")).show(ui.ctx(), |ui| {
                 ui.heading("New Work Entry");
                 if let Some(err) = &self.modal_error {
@@ -211,7 +218,25 @@ impl WorkTab {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.new_station_entry).hint_text("Station"),
                 );
+                if !station_suggestions.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in &station_suggestions {
+                            if ui.small_button(s).clicked() {
+                                self.new_station_entry = s.clone();
+                            }
+                        }
+                    });
+                }
                 ui.add(egui::TextEdit::singleline(&mut self.new_shift_entry).hint_text("Shift"));
+                if !shift_suggestions.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in &shift_suggestions {
+                            if ui.small_button(s).clicked() {
+                                self.new_shift_entry = s.clone();
+                            }
+                        }
+                    });
+                }
                 ui.separator();
                 if ui.button("Add").clicked() {
                     match NaiveDate::parse_from_str(&self.new_date_entry, "%Y-%m-%d") {
@@ -243,6 +268,8 @@ impl WorkTab {
 
         // Edit modal
         if self.editing_id.is_some() {
+            let station_suggestions = self.station_suggestions.clone();
+            let shift_suggestions = self.shift_suggestions.clone();
             let modal = Modal::new(Id::new("work_edit_modal")).show(ui.ctx(), |ui| {
                 ui.heading("Edit Work Entry");
                 if let Some(err) = &self.modal_error {
@@ -260,7 +287,25 @@ impl WorkTab {
                 });
 
                 ui.add(egui::TextEdit::singleline(&mut self.edit_station).hint_text("Station"));
+                if !station_suggestions.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in &station_suggestions {
+                            if ui.small_button(s).clicked() {
+                                self.edit_station = s.clone();
+                            }
+                        }
+                    });
+                }
                 ui.add(egui::TextEdit::singleline(&mut self.edit_shift).hint_text("Shift"));
+                if !shift_suggestions.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in &shift_suggestions {
+                            if ui.small_button(s).clicked() {
+                                self.edit_shift = s.clone();
+                            }
+                        }
+                    });
+                }
                 ui.separator();
                 if ui.button("Save").clicked() {
                     match NaiveDate::parse_from_str(&self.edit_date, "%Y-%m-%d") {
@@ -450,6 +495,8 @@ impl WorkTab {
         if self.dirty {
             self.cache = self.work_tracker.load_all();
             self.stats = self.work_tracker.stats();
+            self.station_suggestions = self.work_tracker.unique_stations();
+            self.shift_suggestions = self.work_tracker.unique_shifts();
             self.dirty = false;
         }
     }

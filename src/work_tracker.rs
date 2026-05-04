@@ -134,6 +134,28 @@ impl WorkTracker {
         .unwrap();
     }
 
+    pub fn unique_stations(&self) -> Vec<String> {
+        let Some(conn) = &self.conn else { return vec![]; };
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT station FROM work_entries ORDER BY station")
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    }
+
+    pub fn unique_shifts(&self) -> Vec<String> {
+        let Some(conn) = &self.conn else { return vec![]; };
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT shift FROM work_entries ORDER BY shift")
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    }
+
     pub fn export_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
         if self.conn.is_none() {
             return Err("No database connection".into());
