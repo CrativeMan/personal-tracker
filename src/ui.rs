@@ -90,12 +90,11 @@ impl ExportStatus {
     }
 
     pub fn tick(&mut self) -> Option<String> {
-        if let Some(ts) = self.since {
-            if ts.elapsed().as_secs() >= 3 {
+        if let Some(ts) = self.since
+            && ts.elapsed().as_secs() >= 3 {
                 self.message = None;
                 self.since = None;
             }
-        }
         self.message.clone()
     }
 }
